@@ -1,12 +1,19 @@
 (ns swarmpit.registry.client
   (:refer-clojure :exclude [get])
   (:require [org.httpkit.client :as http]
-            [cheshire.core :refer [parse-string generate-string]]
-            [swarmpit.token :as token]))
+            [cheshire.core :refer [parse-string generate-string parse-stream]]
+            [swarmpit.token :as token])
+  (:import (org.httpkit BytesInputStream)))
 
 (defn- build-url
   [registry api]
   (str (:url registry) "/v2" api))
+
+(defn- parse-response-body
+  [body]
+  (if (instance? BytesInputStream body)
+    (parse-stream (clojure.java.io/reader body))
+    (parse-string body true)))
 
 (defn- execute
   [call-fx]
@@ -16,7 +23,7 @@
         (ex-info "Registry client failure!"
                  {:status 500
                   :body   {:error (:cause (Throwable->map error))}}))
-      (let [response (parse-string body true)]
+      (let [response (parse-response-body body)]
         (if (> 400 status)
           response
           (throw
@@ -28,7 +35,8 @@
   [registry api headers params]
   (let [url (build-url registry api)
         options {:timeout      5000
-                 :headers      headers
+                 :headers      (merge {"Content-Type" "application/json"}
+                                      headers)
                  :query-params params
                  :insecure?    true}]
     (execute @(http/get url options))))
@@ -57,6 +65,13 @@
     (get registry api headers nil)))
 
 (defn manifest
+  [registry repository-name repository-tag]
+  (let [headers (basic-auth registry)
+        api (str "/" repository-name "/manifests/" repository-tag)]
+    (get registry api (merge headers
+                             {"Accept" "application/vnd.docker.container.image.v1+json"}) nil)))
+
+(defn distribution
   [registry repository-name repository-tag]
   (let [headers (basic-auth registry)
         api (str "/" repository-name "/manifests/" repository-tag)]
