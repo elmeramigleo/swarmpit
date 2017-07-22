@@ -249,11 +249,20 @@
     (->> (drc/tags token repository-name)
          :tags)))
 
-(defn dockerhub-repository-id
+(defn dockerhub-ports
   [repository-name repository-tag dockeruser-name]
   (let [user (dockeruser-by-username dockeruser-name)
         token (:token (dac/token user repository-name))]
     (-> (drc/manifest token repository-name repository-tag)
+        (rmi/->repository-config)
+        :config
+        (dmi/->image-ports))))
+
+(defn dockerhub-repository-id
+  [repository-name repository-tag dockeruser-name]
+  (let [user (dockeruser-by-username dockeruser-name)
+        token (:token (dac/token user repository-name))]
+    (-> (drc/distribution token repository-name repository-tag)
         (get-in [:config :digest]))))
 
 ;;; Registry V2 API
@@ -271,14 +280,28 @@
 (defn repository-id
   [registry-name repository-name repository-tag]
   (-> (registry-by-name registry-name)
-      (rc/manifest repository-name repository-tag)
+      (rc/distribution repository-name repository-tag)
       (get-in [:config :digest])))
+
+(defn repository-ports
+  [registry-name repository-name repository-tag]
+  (-> (registry-by-name registry-name)
+      (rc/manifest repository-name repository-tag)
+      (rmi/->repository-config)
+      :config
+      (dmi/->image-ports)))
 
 ;;; Image API
 
 (defn image
-  [image]
-  (dc/image image))
+  [img]
+  (dc/image img))
+
+(defn image-ports
+  [img]
+  (-> (image img)
+      :Config
+      (dmi/->image-ports)))
 
 ;;; Service API
 
